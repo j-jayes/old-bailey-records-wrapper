@@ -33,8 +33,6 @@ def fetch_data(search_term):
         data = response.json()
         total_hits = data['hits']['total']
         pages = ceil(total_hits / size_param)
-        # set pages to 2 for testing
-        pages = 2
         rows = []
         
         progress_bar = st.progress(0)
