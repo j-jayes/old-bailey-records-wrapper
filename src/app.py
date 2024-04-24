@@ -4,6 +4,7 @@ import pandas as pd
 from math import ceil
 from io import BytesIO
 import re
+import datetime
 
 # Function to extract dates from the title
 def extract_date(title):
@@ -83,10 +84,12 @@ if st.button("Fetch Data"):
         if not df.empty:
             st.write(df)
             excel_data = to_excel(df)
+            current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            file_name = f'old-bailey-{search_term}-{current_datetime}.xlsx'
             st.download_button(
                 label="Download Excel file",
                 data=excel_data,
-                file_name=f'old-bailey-{search_term}.xlsx',
+                file_name=file_name,
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
             st.success('Data fetched successfully!')
