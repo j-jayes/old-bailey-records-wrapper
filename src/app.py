@@ -8,7 +8,7 @@ import datetime
 
 # Function to extract dates from the title
 def extract_date(title):
-    date_pattern = r'\d{1,2}(?:st|nd|rd|th)?\s\w+\s\d{4}'  # Matches dates in the format "12th January 1800"
+    date_pattern = r'\d{1,2}(?:st|nd|rd|th)?\s\w+\s\d{4}'
     match = re.search(date_pattern, title)
     if match:
         return match.group(0)
@@ -22,20 +22,38 @@ def to_excel(df):
     processed_data = output.getvalue()
     return processed_data
 
+# Function to fetch the full text for a single record
+def fetch_full_text(idkey):
+    url = f"https://www.dhi.ac.uk/api/data/oldbailey_record_single?idkey={idkey}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        full_text = data['hits']['hits'][0]['_source']['text']
+        return full_text
+    else:
+        return "Failed to retrieve full text"
+
 # Function to fetch and process data
-def fetch_data(search_term):
+def fetch_data(search_term, max_results=None):
     base_url = "https://www.dhi.ac.uk/api/data/oldbailey_record"
     from_param = 0
-    size_param = 10
+    size_param = 10  # Fetch 10 records at a time
     url = f"{base_url}?text={search_term}&from={from_param}&size={size_param}"
     
     response = requests.get(url)
     if response.status_code == 200:
         data = response.json()
         total_hits = data['hits']['total']
-        pages = ceil(total_hits / size_param)
-        rows = []
+        if total_hits == 0:
+            st.info("No records found for the given search term.")
+            return pd.DataFrame()
         
+        if max_results:
+            pages = ceil(min(max_results, total_hits) / size_param)
+        else:
+            pages = ceil(total_hits / size_param)
+        
+        rows = []
         progress_bar = st.progress(0)
         status_message = st.empty()
         
@@ -52,6 +70,7 @@ def fetch_data(search_term):
             
             records = data['hits']['hits']
             for record in records:
+                full_text = fetch_full_text(record['_source']['idkey'])
                 row = {
                     'id': record['_id'],
                     'index': record['_index'],
@@ -60,7 +79,8 @@ def fetch_data(search_term):
                     'text': record['_source']['text'],
                     'title': record['_source']['title'],
                     'images': record['_source']['images'],
-                    'date': extract_date(record['_source']['title'])
+                    'date': extract_date(record['_source']['title']),
+                    'full_text': full_text
                 }
                 rows.append(row)
             
@@ -78,9 +98,12 @@ def fetch_data(search_term):
 # Streamlit user interface setup
 st.title("Old Bailey Records Search")
 search_term = st.text_input("Enter a search term:", "theft")
+max_results_toggle = st.checkbox("Limit results to 30 records?")
+max_results = 30 if max_results_toggle else None
+
 if st.button("Fetch Data"):
     with st.spinner('Fetching data...'):
-        df = fetch_data(search_term)
+        df = fetch_data(search_term, max_results)
         if not df.empty:
             st.write(df)
             excel_data = to_excel(df)
@@ -92,4 +115,5 @@ if st.button("Fetch Data"):
                 file_name=file_name,
                 mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-            st.success('Data fetched successfully!')
+
+
