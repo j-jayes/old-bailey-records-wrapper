@@ -2,17 +2,11 @@ import streamlit as st
 import requests
 import pandas as pd
 from math import ceil
-from io import BytesIO
-import re
 import datetime
+import re
+from io import BytesIO
+import matplotlib.pyplot as plt
 
-# Function to extract dates from the title
-def extract_date(title):
-    date_pattern = r'\d{1,2}(?:st|nd|rd|th)?\s\w+\s\d{4}'
-    match = re.search(date_pattern, title)
-    if match:
-        return match.group(0)
-    return "Unknown"
 
 # Function to convert DataFrame to Excel for download
 def to_excel(df):
@@ -22,8 +16,38 @@ def to_excel(df):
     processed_data = output.getvalue()
     return processed_data
 
+
+# Function to extract and convert dates from the title
+def extract_date(title):
+    date_pattern = r'\d{1,2}(?:st|nd|rd|th)?\s\w+\s\d{4}'
+    match = re.search(date_pattern, title)
+    if match:
+        date_str = match.group(0)
+        # Remove 'th', 'st', 'nd', 'rd' from day part of the date string
+        date_str = re.sub(r'(\d+)(st|nd|rd|th)', r'\1', date_str)
+        return datetime.datetime.strptime(date_str, "%d %B %Y")
+    return None
+
+def extract_year(title):
+    # Attempt to extract the year from the title string
+    match = re.search(r'\d{4}', title)
+    if match:
+        return int(match.group(0))
+    return None
+
+def plot_histogram(df):
+    # Plotting the histogram of records per year
+    plt.figure(figsize=(10, 4))
+    plt.hist(df['year'], bins=range(min(df['year']), max(df['year']) + 1), alpha=0.75, color='blue', edgecolor='black')
+    plt.title('Number of Records per Year')
+    plt.xlabel('Year')
+    plt.ylabel('Count')
+    plt.grid(True)
+    plt.tight_layout()
+    return plt
+
 # Function to fetch the full text for a single record
-def fetch_full_text(idkey):
+def fetch_detailed_data(idkey):
     url = f"https://www.dhi.ac.uk/api/data/oldbailey_record_single?idkey={idkey}"
     response = requests.get(url)
     if response.status_code == 200:
@@ -70,19 +94,19 @@ def fetch_data(search_term, max_results=None):
             
             records = data['hits']['hits']
             for record in records:
-                full_text = fetch_full_text(record['_source']['idkey'])
-                row = {
-                    'id': record['_id'],
-                    'index': record['_index'],
-                    'type': record['_type'],
-                    'idkey': record['_source']['idkey'],
-                    'text': record['_source']['text'],
-                    'title': record['_source']['title'],
-                    'images': record['_source']['images'],
-                    'date': extract_date(record['_source']['title']),
-                    'full_text': full_text
-                }
-                rows.append(row)
+                date = extract_date(record['_source']['title'])
+                if date is not None:
+                    row = {
+                        'id': record['_id'],
+                        'index': record['_index'],
+                        'type': record['_type'],
+                        'idkey': record['_source']['idkey'],
+                        'text': record['_source']['text'],
+                        'title': record['_source']['title'],
+                        'images': record['_source']['images'],
+                        'date': date.strftime("%Y-%m-%d"),
+                    }
+                    rows.append(row)
             
             progress_bar.progress((page + 1) / pages)
 
@@ -95,25 +119,79 @@ def fetch_data(search_term, max_results=None):
         st.error("Failed to retrieve data: " + str(response.status_code))
         return pd.DataFrame()
 
-# Streamlit user interface setup
-st.title("Old Bailey Records Search")
-search_term = st.text_input("Enter a search term:", "theft")
-max_results_toggle = st.checkbox("Limit results to 30 records?")
-max_results = 30 if max_results_toggle else None
 
-if st.button("Fetch Data"):
-    with st.spinner('Fetching data...'):
-        df = fetch_data(search_term, max_results)
-        if not df.empty:
-            st.write(df)
-            excel_data = to_excel(df)
-            current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            file_name = f'old-bailey-{search_term}-{current_datetime}.xlsx'
-            st.download_button(
-                label="Download Excel file",
-                data=excel_data,
-                file_name=file_name,
-                mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            )
+def fetch_detailed_data(idkey):
+    try:
+        response = requests.get(f"https://www.dhi.ac.uk/api/data/oldbailey_record_single?idkey={idkey}")
+        if response.status_code == 200:
+            record = response.json()['hits']['hits'][0]  # Adjusted to access the first hit directly
+            source = record['_source']
+            return {
+                'id': record['_id'],
+                'index': record['_index'],
+                'type': record['_type'],
+                'idkey': source['idkey'],
+                'title': source['title'],
+                'images': source['images'],
+                'text': source['text']
+            }
+        else:
+            st.error(f"Failed to fetch details for ID {idkey}: HTTP {response.status_code}")
+            return None
+    except Exception as e:
+        st.error(f"An error occurred while fetching details for ID {idkey}: {str(e)}")
+        return None
+
+def fetch_all_details(filtered_df):
+    details = []
+    progress_bar = st.progress(0)
+    for i, record in enumerate(filtered_df.itertuples()):
+        detail = fetch_detailed_data(record.idkey)
+        if detail:
+            details.append(detail)
+        progress_bar.progress((i + 1) / len(filtered_df))
+    progress_bar.empty()
+    return pd.DataFrame(details)
 
 
+def main():
+    st.title("Old Bailey Case Search")
+
+    # Search term input
+    search_term = st.text_input("Enter search keyword:", "")
+    if search_term:
+        if 'search_results' not in st.session_state or st.session_state.search_term != search_term:
+            st.session_state.search_results = fetch_data(search_term)
+            st.session_state.search_term = search_term
+
+        if not st.session_state.search_results.empty:
+            search_results = st.session_state.search_results
+            search_results['year'] = search_results['title'].apply(extract_year)
+            # st.dataframe(search_results[['id', 'title', 'year']])
+            hist_plot = plot_histogram(search_results)
+            st.pyplot(hist_plot)
+
+            year_min = st.session_state.search_results['date'].min()[:4]
+            year_max = st.session_state.search_results['date'].max()[:4]
+            years = st.slider("Select Year Range", int(year_min), int(year_max), (int(year_min), int(year_max)))
+
+            filtered_df = st.session_state.search_results[st.session_state.search_results['date'].between(f"{years[0]}-01-01", f"{years[1]}-12-31")]
+
+            if st.button("Fetch Details for All in Range"):
+                df_detailed = fetch_all_details(filtered_df)
+                if not df_detailed.empty:
+                    st.write(df_detailed)
+                    excel_data = to_excel(df_detailed)
+                    current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+                    safe_search_term = "".join([c for c in search_term if c.isalnum() or c in [' ', '-', '_']]).rstrip()
+                    file_name = f'old-bailey-{safe_search_term}-{current_datetime}-{year_min}-{year_max}.xlsx'
+                    st.download_button(
+                        label="Download Excel file",
+                        data=excel_data,
+                        file_name=file_name,
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    )
+
+if __name__ == "__main__":
+    main()
