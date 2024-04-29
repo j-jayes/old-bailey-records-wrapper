@@ -1,3 +1,40 @@
+"""
+Old Bailey Case Search Application
+
+This Streamlit-based web application enables users to search and interact with historical records from the Old Bailey API, 
+which contains detailed information about court cases in England between 1600 and 1910. The app allows users to search 
+for cases based on keywords, view a histogram of results by year, filter cases by date range, fetch detailed information 
+about specific cases, and download this information in an Excel format.
+
+Functions:
+    to_excel(df): Converts a DataFrame into an Excel file stored in a BytesIO stream, ready for download.
+    extract_date(title): Extracts and converts dates from case titles using regex, returning datetime objects.
+    extract_year(title): Extracts the year from case titles using regex for histogram plotting.
+    plot_histogram(df): Plots and returns a histogram of the number of cases per year using matplotlib.
+    fetch_detailed_data(idkey): Fetches full text and other details for a single record from the API using the provided ID key.
+    fetch_data(search_term, max_results=None): Retrieves case records from the API based on a search term and optional maximum results limit.
+    fetch_all_details(filtered_df): Fetches detailed data for all records in a filtered DataFrame and returns a new DataFrame with these details.
+    main(): Contains the Streamlit UI components and logic driving the application.
+
+Usage:
+    Run the application with Streamlit using the command `streamlit run app.py`. 
+    Interact with the web interface to perform searches, view results, and download data.
+
+Example:
+    After starting the application, enter a search keyword such as 'theft' in the text input box. 
+    Press the search button to retrieve initial results, which can then be filtered by year using the provided slider.
+    Detailed case information can be fetched and downloaded post-filtering.
+
+Notes:
+    The application requires an active internet connection to fetch data from the Old Bailey API.
+    Ensure all dependencies, including Streamlit, pandas, requests, matplotlib, and xlsxwriter, are installed and up-to-date.
+    Adjust the `base_url` and API endpoints if the Old Bailey API specification changes.
+
+Author:
+    Jonathan Jayes
+"""
+
+
 import streamlit as st
 import requests
 import pandas as pd
