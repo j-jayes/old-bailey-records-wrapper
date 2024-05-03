@@ -2,7 +2,7 @@
 Old Bailey Case Search Application
 
 This Streamlit-based web application enables users to search and interact with historical records from the Old Bailey API, 
-which contains detailed information about court cases in England between 1600 and 1910. The app allows users to search 
+which contains detailed information about court cases in England between 1674 and 1913. The app allows users to search 
 for cases based on keywords, view a histogram of results by year, filter cases by date range, fetch detailed information 
 about specific cases, and download this information in an Excel format.
 
